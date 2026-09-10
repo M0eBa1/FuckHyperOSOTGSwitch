@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">FuckHyperOSOTGSwitch</string>
+    <string name="xposed_description">防止小米/HyperOS OTG 10分钟自动关闭，保持常开</string>
 </resources>
