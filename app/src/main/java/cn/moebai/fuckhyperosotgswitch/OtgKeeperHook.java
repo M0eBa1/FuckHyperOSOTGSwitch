@@ -3,6 +3,7 @@ package cn.moebai.fuckhyperosotgswitch;
 import android.content.ContentResolver;
 import android.content.Intent;
 import android.provider.Settings;
+import android.util.Log;
 
 import java.lang.reflect.Method;
 
@@ -15,6 +16,14 @@ public class OtgKeeperHook extends XposedModule {
 
     public OtgKeeperHook(XposedInterface base, ModuleLoadedParam param) {
         super(base, param);
+    }
+
+    private void logMsg(String msg) {
+        log(Log.INFO, TAG, msg);
+    }
+
+    private void logErr(String msg, Throwable t) {
+        log(Log.ERROR, TAG, msg, t);
     }
 
     @Override
@@ -45,7 +54,7 @@ public class OtgKeeperHook extends XposedModule {
                 hookOtgController(clazz);
             } catch (ClassNotFoundException ignored) {
             } catch (Throwable t) {
-                log(TAG + " error finding class: " + className + ", " + t.getMessage());
+                logErr("Error finding class: " + className, t);
             }
         }
 
@@ -54,7 +63,6 @@ public class OtgKeeperHook extends XposedModule {
             Class<?> contextWrapperClass = cl.loadClass("android.content.ContextWrapper");
             Method sendBroadcastMethod = contextWrapperClass.getMethod("sendBroadcast", Intent.class);
             hook(sendBroadcastMethod).intercept(chain -> {
-                // 判断 Intent 是否为 OTG 超时/关闭广播
                 Object[] args = new Object[]{};
                 try {
                     Method getArgsMethod = chain.getClass().getMethod("getArgs");
@@ -66,15 +74,15 @@ public class OtgKeeperHook extends XposedModule {
                     if (intent.getAction() != null) {
                         String action = intent.getAction().toLowerCase();
                         if (action.contains("otg") && (action.contains("timeout") || action.contains("stop") || action.contains("disable"))) {
-                            log(TAG + " blocked settings broadcast: " + intent.getAction());
-                            return null; // 阻断广播发送
+                            logMsg("Blocked settings broadcast: " + intent.getAction());
+                            return null;
                         }
                     }
                 }
                 return chain.proceed();
             });
         } catch (Throwable t) {
-            log(TAG + " hook sendBroadcast failed: " + t.getMessage());
+            logErr("Hook sendBroadcast failed", t);
         }
     }
 
@@ -85,8 +93,8 @@ public class OtgKeeperHook extends XposedModule {
                 if (method.getName().equals(stopName)) {
                     try {
                         hook(method).intercept(chain -> {
-                            log(TAG + " blocked controller method: " + clazz.getName() + "#" + method.getName());
-                            return null; // 直接阻断方法执行
+                            logMsg("Blocked controller method: " + clazz.getName() + "#" + method.getName());
+                            return null;
                         });
                     } catch (Throwable ignored) {
                     }
@@ -111,7 +119,7 @@ public class OtgKeeperHook extends XposedModule {
                     if (intent.getAction() != null) {
                         String action = intent.getAction().toLowerCase();
                         if (action.contains("otg") && (action.contains("timeout") || action.contains("stop") || action.contains("disable"))) {
-                            log(TAG + " blocked powerkeeper broadcast: " + intent.getAction());
+                            logMsg("Blocked powerkeeper broadcast: " + intent.getAction());
                             return null;
                         }
                     }
@@ -134,7 +142,7 @@ public class OtgKeeperHook extends XposedModule {
                         String name = (String) args[1];
                         int value = (int) args[2];
                         if (isOtgKey(name) && value == 0) {
-                            log(TAG + " prevented Global " + name + " from setting to 0, forcing to 1");
+                            logMsg("Prevented Global " + name + " from setting to 0, forcing to 1");
                             args[2] = 1;
                             return chain.proceed(args);
                         }
@@ -144,7 +152,7 @@ public class OtgKeeperHook extends XposedModule {
                 return chain.proceed();
             });
         } catch (Throwable t) {
-            log(TAG + " hook Settings.Global.putInt failed: " + t.getMessage());
+            logErr("Hook Settings.Global.putInt failed", t);
         }
 
         // 拦截 Settings.System.putInt 将 OTG 写入 0 (关闭)
@@ -158,7 +166,7 @@ public class OtgKeeperHook extends XposedModule {
                         String name = (String) args[1];
                         int value = (int) args[2];
                         if (isOtgKey(name) && value == 0) {
-                            log(TAG + " prevented System " + name + " from setting to 0, forcing to 1");
+                            logMsg("Prevented System " + name + " from setting to 0, forcing to 1");
                             args[2] = 1;
                             return chain.proceed(args);
                         }
@@ -168,7 +176,7 @@ public class OtgKeeperHook extends XposedModule {
                 return chain.proceed();
             });
         } catch (Throwable t) {
-            log(TAG + " hook Settings.System.putInt failed: " + t.getMessage());
+            logErr("Hook Settings.System.putInt failed", t);
         }
     }
 
