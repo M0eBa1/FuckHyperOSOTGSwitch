@@ -5,6 +5,8 @@ import android.content.Intent;
 import android.provider.Settings;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
+
 import java.lang.reflect.Method;
 
 import io.github.libxposed.api.XposedInterface;
@@ -14,8 +16,8 @@ public class OtgKeeperHook extends XposedModule {
 
     private static final String TAG = "FuckHyperOSOTGSwitch";
 
-    public OtgKeeperHook(XposedInterface base, ModuleLoadedParam param) {
-        super(base, param);
+    public OtgKeeperHook() {
+        super();
     }
 
     private void logMsg(String msg) {
@@ -27,20 +29,22 @@ public class OtgKeeperHook extends XposedModule {
     }
 
     @Override
-    public void onPackageLoaded(PackageLoadedParam param) {
+    public void onSystemServerStarting(@NonNull SystemServerStartingParam param) {
+        hookSystemServer(param.getClassLoader());
+    }
+
+    @Override
+    public void onPackageReady(@NonNull PackageReadyParam param) {
         String packageName = param.getPackageName();
 
         if ("com.android.settings".equals(packageName)) {
-            hookSettings(param);
-        } else if ("android".equals(packageName)) {
-            hookSystemServer(param);
+            hookSettings(param.getClassLoader());
         } else if ("com.miui.powerkeeper".equals(packageName)) {
-            hookPowerKeeper(param);
+            hookPowerKeeper(param.getClassLoader());
         }
     }
 
-    private void hookSettings(PackageLoadedParam param) {
-        ClassLoader cl = param.getClassLoader();
+    private void hookSettings(ClassLoader cl) {
         String[] possibleClasses = new String[]{
                 "com.android.settings.connecteddevice.OtgPreferenceController",
                 "com.android.settings.hardware.OtgPreferenceController",
@@ -103,9 +107,9 @@ public class OtgKeeperHook extends XposedModule {
         }
     }
 
-    private void hookPowerKeeper(PackageLoadedParam param) {
+    private void hookPowerKeeper(ClassLoader cl) {
         try {
-            Class<?> contextWrapperClass = param.getClassLoader().loadClass("android.content.ContextWrapper");
+            Class<?> contextWrapperClass = cl.loadClass("android.content.ContextWrapper");
             Method sendBroadcastMethod = contextWrapperClass.getMethod("sendBroadcast", Intent.class);
             hook(sendBroadcastMethod).intercept(chain -> {
                 Object[] args = new Object[]{};
@@ -130,7 +134,7 @@ public class OtgKeeperHook extends XposedModule {
         }
     }
 
-    private void hookSystemServer(PackageLoadedParam param) {
+    private void hookSystemServer(ClassLoader cl) {
         // 拦截 Settings.Global.putInt 将 OTG 写入 0 (关闭)
         try {
             Method putIntGlobal = Settings.Global.class.getMethod("putInt", ContentResolver.class, String.class, int.class);
